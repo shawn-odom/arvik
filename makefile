@@ -28,7 +28,7 @@ tar:
 	tar tvaf $(TAR_FILE)
 
 git:
-	@if [ ! -d .git ] ; then git init; git remote add origin  git@github.com:shawn-odom/Caesar-Cypher-XOR-Encryption-Custom-Mystat.git; fi
+	@if [ ! -d .git ] ; then git init; git remote add origin git@github.com:shawn-odom/arvik.git; fi
 	git add *.[ch] ?akefile
 	git commit -m $(GIT_COMMIT_MSG)
 	git branch -M main
