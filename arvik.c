@@ -12,13 +12,13 @@
 #include "arvik.h"
 
 void show_help(void);
-int create_archive(const char * archive_name, char ** members, int member_count, int verbose);
-int extract_archive(const char * archive_name, int verbose, int validate);
-int list_archive(const char * archive_name, int verbose, int validate);
+void create_archive(char * archive_name, char ** members, int member_count, int verbose);
+void extract_archive(char * archive_name, int verbose, int validate);
+void list_archive( char * archive_name, int verbose, int validate);
 int check_archive_tag(int fd);
-int write_header(int archive_fd, const char * filename);
-int write_footer(int archive_fd, uLong crc);
-int extract_file(int archive_fd, arvik_header_t header, int verbose, int validate);
+void write_header(int archive_fd, char * filename);
+void write_footer(int archive_fd, uLong crc);
+void extract_file(int archive_fd, arvik_header_t header, int verbose, int validate);
 void process_archive(int archive_fd, int verbose, int validate, void (*process_func)(int, arvik_header_t, int, int));
 void print_file_info (arvik_header_t header, int verbose);
 
@@ -234,7 +234,7 @@ void write_footer(int archive_fd, uLong crc)
     memset(&footer, 0, sizeof(footer));
 
     // Fill in footer fields
-    sprintf(footer.arvik_data_crcm "0x%08lx", crc) // Convert CRC to hex string
+    sprintf(footer.arvik_data_crc, "0x%0lx", crc); // Convert CRC to hex string
 
     // Set Terminator
     footer.arvik_term[0] = ARVIK_TERM;
@@ -324,7 +324,7 @@ void extract_file(int archive_fd, arvik_header_t header, int verbose, int valida
     // Verbose check
     if (verbose)
     {
-        printf("x - %s\n", header,arvik_name);
+        printf("x - %s\n", header.arvik_name);
     }
 
     // Copy file data
@@ -341,7 +341,7 @@ void extract_file(int archive_fd, arvik_header_t header, int verbose, int valida
         }
 
         // update CRC
-        crc = crc32(crc, (const Bytesf*) buffer, bytes_read);
+        crc = crc32(crc, (const Bytef*) buffer, bytes_read);
 
         // write data to output file
         if (write(file_fd, buffer, bytes_read) != bytes_read)
@@ -381,7 +381,7 @@ void extract_file(int archive_fd, arvik_header_t header, int verbose, int valida
     }
 
     // set file times
-    times[0].tv_sec = times[1].tv_sec = strtol(header.arvik_data, NULL, 10);
+    times[0].tv_sec = times[1].tv_sec = strtol(header.arvik_date, NULL, 10);
     times[0].tv_nsec = times[1].tv_nsec = 0;
 
     if (futimens(file_fd, times) < 0)
@@ -431,4 +431,100 @@ void list_archive(char * archive_name, int verbose, int validate)
 }
 
 
+// Print information about a file in the archive
+void print_file_info(arvik_header_t header, int verbose)
+{
+    size_t file_size;
+    time_t mtime;
+    struct tm *tm_info;
+    char time_str[32];
+    mode_t mode;
+    char mode_str[11];
 
+    // if verbose
+    if (verbose)
+    {
+        file_size = strtol(header.arvik_size, NULL, 10);
+    
+        // conert time string to time_t 
+        mtime = strtol(header.arvik_date, NULL, 10);
+        tm_info = localtime(&mtime);
+        strftime(time_str, sizeof(time_str), "%b %e %R %Y", tm_info);
+
+        // convert mode str to mode_t
+        mode = strtol(header.arvik_mode, NULL, 8);
+
+        // format mode string
+         mode_str[0] = S_ISDIR(mode) ? 'd' : '-';
+        mode_str[1] = (mode & S_IRUSR) ? 'r' : '-';
+        mode_str[2] = (mode & S_IWUSR) ? 'w' : '-';
+        mode_str[3] = (mode & S_IXUSR) ? 'x' : '-';
+        mode_str[4] = (mode & S_IRGRP) ? 'r' : '-';
+        mode_str[5] = (mode & S_IWGRP) ? 'w' : '-';
+        mode_str[6] = (mode & S_IXGRP) ? 'x' : '-';
+        mode_str[7] = (mode & S_IROTH) ? 'r' : '-';
+        mode_str[8] = (mode & S_IWOTH) ? 'w' : '-';
+        mode_str[9] = (mode & S_IXOTH) ? 'x' : '-';
+        mode_str[10] = '\0';
+
+        printf("%s %8s/%s %8ld %s %s\n", mode_str, header.arvik_uid, header.arvik_gid, file_size, time_str, header.arvik_name);
+    }
+    else
+    {
+        // non verbose
+        printf("%s\n", header.arvik_name);
+    }
+}
+
+// Check if file has correct arvik tag
+int check_archive_tag(int fd)
+{
+    char tag[sizeof(ARVIK_TAG)]; // buffer to read the tag
+
+    if (read(fd, tag, strlen(ARVIK_TAG)) != (ssize_t)strlen(ARVIK_TAG))
+    {
+        return 0; //error
+    }
+
+    // check if tag matches
+    return (memcmp(tag, ARVIK_TAG, strlen(ARVIK_TAG)) == 0);
+}
+
+// proccess archive file and call function for each member
+void process_archive(int archive_fd, int verbose, int validate, void(*process_func)(int, arvik_header_t, int, int))
+{
+    arvik_header_t header;
+    size_t file_size;
+
+    // process each file in archive
+    while (read(archive_fd, &header, sizeof(header)) == sizeof(header))
+    {
+        if(header.arvik_term[0] != ARVIK_TERM || header.arvik_term[1] != ARVIK_TERM)
+        {
+            fprintf(stderr, "Error: Invalid header terminator\n");
+            break;
+        }
+
+        process_func(archive_fd, header, verbose, validate);
+    }
+}
+
+// process file in archive during extraction or listing
+void process_file(int archive_fd, arvik_header_t header, int verbose, int validate, int extract)
+{
+    if (extract)
+    {
+        extract_file(archive_fd, header, verbose, validate);
+    }
+    else
+    {
+        print_file_info(header, verbose);
+        
+        size_t file_size = strtol(header.arvik_size, NULL, 10);
+        if (lseek(archive_fd, file_size + sizeof(arvik_footer_t), SEEK_CUR) < 0)
+        {
+            perror("Error skipping file data and footer");
+            exit(1);
+        }
+    }
+}
