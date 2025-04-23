@@ -29,6 +29,7 @@ tar:
 
 git:
 	@if [ ! -d .git ] ; then git init; git remote add origin git@github.com:shawn-odom/arvik.git; fi
+	git add .gitignore
 	git add *.[ch] ?akefile
 	git commit -m $(GIT_COMMIT_MSG)
 	git branch -M main
