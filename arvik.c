@@ -20,7 +20,8 @@ void write_header(int archive_fd, char * filename);
 void write_footer(int archive_fd, uLong crc);
 void extract_file(int archive_fd, arvik_header_t header, int verbose, int validate);
 void process_archive(int archive_fd, int verbose, int validate, void (*process_func)(int, arvik_header_t, int, int));
-void print_file_info (arvik_header_t header, int verbose);
+void print_file_info (int archive_fd, arvik_header_t header, int verbose, int validate);
+void process_file(int archive_fd, arvik_header_t header, int verbose, int validate, int extract);
 
 
 int main(int argc, char * argv[]) 
@@ -215,8 +216,8 @@ void write_header(int archive_fd, char * filename)
     sprintf(header.arvik_size, "%ld", st.st_size); // Convert size to string
 
     // Set terminator
-    header.arvik_term[0] = ARVIK_TERM;
-    header.arvik_term[1] = ARVIK_TERM;
+    header.arvik_term[0] = ARVIK_TERM[0];
+    header.arvik_term[1] = ARVIK_TERM[0];
 
     // Write the header to the archive
     if (write(archive_fd, &header, sizeof(header)) != sizeof(header))
@@ -237,8 +238,8 @@ void write_footer(int archive_fd, uLong crc)
     sprintf(footer.arvik_data_crc, "0x%0lx", crc); // Convert CRC to hex string
 
     // Set Terminator
-    footer.arvik_term[0] = ARVIK_TERM;
-    footer.arvik_term[1] = ARVIK_TERM;
+    footer.arvik_term[0] = ARVIK_TERM[0];
+    footer.arvik_term[1] = ARVIK_TERM[0];
 
     // Write footer to archive
     if (write(archive_fd, &footer, sizeof(footer)) != sizeof(footer))
@@ -432,7 +433,7 @@ void list_archive(char * archive_name, int verbose, int validate)
 
 
 // Print information about a file in the archive
-void print_file_info(arvik_header_t header, int verbose)
+void print_file_info(int archive_fd, arvik_header_t header, int verbose, int validate)
 {
     size_t file_size;
     time_t mtime;
@@ -440,6 +441,9 @@ void print_file_info(arvik_header_t header, int verbose)
     char time_str[32];
     mode_t mode;
     char mode_str[11];
+    
+    (void) archive_fd;
+    (void) validate;
 
     // if verbose
     if (verbose)
@@ -494,12 +498,12 @@ int check_archive_tag(int fd)
 void process_archive(int archive_fd, int verbose, int validate, void(*process_func)(int, arvik_header_t, int, int))
 {
     arvik_header_t header;
-    size_t file_size;
+    (void) validate;
 
     // process each file in archive
     while (read(archive_fd, &header, sizeof(header)) == sizeof(header))
     {
-        if(header.arvik_term[0] != ARVIK_TERM || header.arvik_term[1] != ARVIK_TERM)
+        if(header.arvik_term[0] != ARVIK_TERM[0] || header.arvik_term[1] != ARVIK_TERM[0])
         {
             fprintf(stderr, "Error: Invalid header terminator\n");
             break;
@@ -512,15 +516,16 @@ void process_archive(int archive_fd, int verbose, int validate, void(*process_fu
 // process file in archive during extraction or listing
 void process_file(int archive_fd, arvik_header_t header, int verbose, int validate, int extract)
 {
+    size_t file_size;
     if (extract)
     {
         extract_file(archive_fd, header, verbose, validate);
     }
     else
     {
-        print_file_info(header, verbose);
+        print_file_info(archive_fd, header, verbose, validate);
         
-        size_t file_size = strtol(header.arvik_size, NULL, 10);
+        file_size = strtol(header.arvik_size, NULL, 10);
         if (lseek(archive_fd, file_size + sizeof(arvik_footer_t), SEEK_CUR) < 0)
         {
             perror("Error skipping file data and footer");
