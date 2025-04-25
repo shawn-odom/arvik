@@ -10,18 +10,17 @@
 #include <zlib.h>
 
 #include "arvik.h"
-
+#define arvik_uname "shawno"
+#define arvik_gname "them"
 void show_help(void);
 void create_archive(char * archive_name, char ** members, int member_count, int verbose);
 void extract_archive(char * archive_name, int verbose, int validate);
 void list_archive( char * archive_name, int verbose, int validate);
-int check_archive_tag(int fd);
 void write_header(int archive_fd, char * filename);
 void write_footer(int archive_fd, uLong crc);
 void extract_file(int archive_fd, arvik_header_t header, int verbose, int validate);
-void process_archive(int archive_fd, int verbose, int validate, void (*process_func)(int, arvik_header_t, int, int));
+void process_archive(int archive_fd, int verbose, int validate);
 void print_file_info (int archive_fd, arvik_header_t header, int verbose, int validate);
-void process_file(int archive_fd, arvik_header_t header, int verbose, int validate, int extract);
 
 
 int main(int argc, char * argv[]) 
@@ -91,13 +90,13 @@ int main(int argc, char * argv[])
 void show_help(void)
 {
     printf("Usage: arvik -[cxtvVf:h] archive-file file...\n");
-    printf("-c              create a new archive file\n");
-    printf("-x              extract members from an existing archive\n");
-    printf("-t              show the table of contents of archive fi\n");
-    printf(" -f filename    name of archive file to use\n");
-    printf("-V              Validate the crc value for the data\n");
-    printf("-v              verbose output\n");
-    printf("-h              show help text\n");
+    printf("    -c           create a new archive file\n");
+    printf("    -x           extract members from an existing archive file\n");
+    printf("    -t           show the table of contents of archive file\n");
+    printf("    -f filename  name of archive file to use\n");
+    printf("    -V           Validate the crc value for the data\n");
+    printf("    -v           verbose output\n");
+    printf("    -h           show help text\n");
 }
 
 // Create new archive file
@@ -216,7 +215,7 @@ void write_header(int archive_fd, char * filename)
 
     // Set terminator
     header.arvik_term[0] = ARVIK_TERM[0];
-    header.arvik_term[1] = ARVIK_TERM[0];
+    header.arvik_term[1] = ARVIK_TERM[1];
 
     // Write the header to the archive
     if (write(archive_fd, &header, sizeof(header)) != sizeof(header))
@@ -238,7 +237,7 @@ void write_footer(int archive_fd, uLong crc)
 
     // Set Terminator
     footer.arvik_term[0] = ARVIK_TERM[0];
-    footer.arvik_term[1] = ARVIK_TERM[0];
+    footer.arvik_term[1] = ARVIK_TERM[1];
 
     // Write footer to archive
     if (write(archive_fd, &footer, sizeof(footer)) != sizeof(footer))
@@ -251,6 +250,7 @@ void write_footer(int archive_fd, uLong crc)
 void extract_archive(char * archive_name, int verbose, int validate)
 {
     int archive_fd; // File descriptor for the archive file
+    char buffer[100] = {'\0'};
 
     if (archive_name == NULL)
     {
@@ -265,16 +265,14 @@ void extract_archive(char * archive_name, int verbose, int validate)
             exit(1);
         }
     }
-    
-    // Check if the file has correct tag
-    if (!check_archive_tag(archive_fd))
+        
+    read (archive_fd, buffer, strlen(ARVIK_TAG));
+    if (strncmp(buffer, ARVIK_TAG, strlen(ARVIK_TAG)) != 0)
     {
-        fprintf(stderr, "Error: Not a valid arvik archive file\n");
-        close(archive_fd);
-        exit(BAD_TAG);
+        fprintf(stderr, "Error, not a correct arvik archive file\n");
+        exit(EXIT_FAILURE);
     }
-
-    process_archive(archive_fd, verbose, validate, extract_file);
+    process_archive(archive_fd, verbose, validate);
 
     // Close file if not stdin
     if (archive_fd != STDIN_FILENO)
@@ -398,33 +396,29 @@ void extract_file(int archive_fd, arvik_header_t header, int verbose, int valida
 void list_archive(char * archive_name, int verbose, int validate)
 {
     int archive_fd;
+    char buffer[100] = {'\0'};
 
-    if (archive_name == NULL)
+    if (archive_name != NULL)
     {
-        archive_fd = STDIN_FILENO;
+        archive_fd = open(archive_name, O_RDONLY);
     }
     else
     {
-        archive_fd = open(archive_name, O_RDONLY);
-        if (archive_fd < 0)
-        {
-            perror("Error opening archive file for reading");
-            exit(1);
-        }
+        exit(NO_ARCHIVE_NAME);
     }
 
     // check if file has correct tag
-    if (!check_archive_tag(archive_fd))
+    read (archive_fd, buffer, strlen(ARVIK_TAG));
+    if (strncmp(buffer, ARVIK_TAG, strlen(ARVIK_TAG)) != 0)
     {
-        fprintf(stderr, "Error: Not a valid arvik archive file\n");
-        close(archive_fd);
-        exit(BAD_TAG);
+        fprintf(stderr, "Error, not a correct arvik archive file\n");
+        exit(EXIT_FAILURE);
     }
 
-    process_archive(archive_fd, verbose, validate, print_file_info);
+    process_archive(archive_fd, verbose, validate);
 
     // close if not stdin
-    if (archive_fd != STDIN_FILENO)
+    if (archive_name != NULL)
     {
         close (archive_fd);
     }
@@ -445,7 +439,7 @@ void print_file_info(int archive_fd, arvik_header_t header, int verbose, int val
     (void) validate;
 
     // if verbose
-    if (verbose)
+    if (verbose == 1)
     {
         file_size = strtol(header.arvik_size, NULL, 10);
     
@@ -479,56 +473,77 @@ void print_file_info(int archive_fd, arvik_header_t header, int verbose, int val
     }
 }
 
-// Check if file has correct arvik tag
-int check_archive_tag(int fd)
-{
-    char tag[sizeof(ARVIK_TAG)]; // buffer to read the tag
-
-    if (read(fd, tag, strlen(ARVIK_TAG)) != (ssize_t)strlen(ARVIK_TAG))
-    {
-        return 0; //error
-    }
-
-    // check if tag matches
-    return (memcmp(tag, ARVIK_TAG, strlen(ARVIK_TAG)) == 0);
-}
 
 // proccess archive file and call function for each member
-void process_archive(int archive_fd, int verbose, int validate, void(*process_func)(int, arvik_header_t, int, int))
+void process_archive(int archive_fd, int verbose, int validate)
 {
+    size_t file_size;
+    time_t mtime;
+    struct tm *tm_info;
+    char time_str[32];
+    mode_t mode;
+    char mode_str[11];
     arvik_header_t header;
+    arvik_footer_t footer;
+    char * back_pos = NULL;
+    char buffer[100] = {'\0'};
+
     (void) validate;
 
     // process each file in archive
-    while (read(archive_fd, &header, sizeof(header)) == sizeof(header))
+    while (read(archive_fd, &header, sizeof(header)) > 0)
     {
-        if(header.arvik_term[0] != ARVIK_TERM[0] || header.arvik_term[1] != ARVIK_TERM[0])
+        memset(buffer, 0, 100);
+        strncpy(buffer, header.arvik_name, 16);
+        if ((back_pos = strchr(buffer, '/')))
         {
-            fprintf(stderr, "Error: Invalid header terminator\n");
-            break;
+            *back_pos = '\0';
+        }
+        if(verbose == 1)
+        {
+            file_size = strtol(header.arvik_size, NULL, 10);
+
+           
+            // conert time string to time_t 
+            mtime = strtol(header.arvik_date, NULL, 10);
+            tm_info = localtime(&mtime);
+            strftime(time_str, sizeof(time_str), "%b %e %R %Y", tm_info);
+
+            // convert mode str to mode_t
+            mode = strtol(header.arvik_mode, NULL, 8);
+
+            // format mode string
+            mode_str[0] = S_ISDIR(mode) ? 'd' : ' ';
+            mode_str[1] = (mode & S_IRUSR) ? 'r' : '-';
+            mode_str[2] = (mode & S_IWUSR) ? 'w' : '-';
+            mode_str[3] = (mode & S_IXUSR) ? 'x' : '-';
+            mode_str[4] = (mode & S_IRGRP) ? 'r' : '-';
+            mode_str[5] = (mode & S_IWGRP) ? 'w' : '-';
+            mode_str[6] = (mode & S_IXGRP) ? 'x' : '-';
+            mode_str[7] = (mode & S_IROTH) ? 'r' : '-';
+            mode_str[8] = (mode & S_IWOTH) ? 'w' : '-';
+            mode_str[9] = (mode & S_IXOTH) ? 'x' : '-';
+            mode_str[10] = '\0';
+
+        printf("file name: %s\n", buffer);
+        printf("    mode:      %s\n", mode_str);
+        printf("    uid:             %.6s%s\n", header.arvik_uid, arvik_uname);
+        printf("    gid:              %.6s%s\n", header.arvik_gid, arvik_gname);
+        printf("    size:              %ld  bytes\n", file_size);
+        printf("    mtime:      %s\n", time_str);
+
+        lseek(archive_fd, atoi(header.arvik_size) + (atoi(header.arvik_size) % 2 == 0 ? 0 : 1), SEEK_CUR);
+        read(archive_fd, &footer, sizeof(footer));
+        printf("    data csc32: %.10s\n", footer.arvik_data_crc);
         }
 
-        process_func(archive_fd, header, verbose, validate);
-    }
-}
-
-// process file in archive during extraction or listing
-void process_file(int archive_fd, arvik_header_t header, int verbose, int validate, int extract)
-{
-    size_t file_size;
-    if (extract)
-    {
-        extract_file(archive_fd, header, verbose, validate);
-    }
-    else
-    {
-        print_file_info(archive_fd, header, verbose, validate);
-        
-        file_size = strtol(header.arvik_size, NULL, 10);
-        if (lseek(archive_fd, file_size + sizeof(arvik_footer_t), SEEK_CUR) < 0)
+        else
         {
-            perror("Error skipping file data and footer");
-            exit(1);
+            printf("%s\n", buffer);
+            file_size = strtol(header.arvik_size, NULL, 10);
+            lseek(archive_fd, atoi(header.arvik_size) + (atoi(header.arvik_size) % 2 == 0 ? 0 : 1), SEEK_CUR);
+            read(archive_fd, &footer, sizeof(footer));
+
         }
-    }
+        }
 }

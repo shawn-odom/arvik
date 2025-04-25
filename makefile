@@ -19,7 +19,7 @@ $(PROG).o : $(PROG).c
 	$(CC) $(CFLAGS) -c $<
 
 clean:
-	rm -f $(PROG) *.o *~ \#*
+	rm -f $(PROG) *.txt *.out *.bin *stoc *.ltoc *.arv *.diff *.o *~ \#*
 
 TAR_FILE = ${LOGNAME}_lab2.tar.gz
 tar:
