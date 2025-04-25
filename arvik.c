@@ -35,7 +35,7 @@ int main(int argc, char * argv[])
     char * archive_name = NULL; //Name of the archive file
 
     //Process the command line options using getopt
-    while ((opt = getopt(argc, argv, "ctxf:hvV")) != -1)
+    while ((opt = getopt(argc, argv, ARVIK_OPTIONS)) != -1)
     {
         switch(opt)
         {
@@ -90,15 +90,14 @@ int main(int argc, char * argv[])
 // Display help for the program
 void show_help(void)
 {
-    printf("Usage: arvik <options> [-f archive-file] [member [...]]\n");
-    printf("Options:\n");
-    printf("  -c        Create an arvik style archive file\n");
-    printf("  -t        Table of contents\n");
-    printf("  -x        Extract members from arvik file\n");
-    printf("  -f file   Specify the name of the arvik file on which to operate\n");
-    printf("  -h        Show this help text and exit\n");
-    printf("  -v        Verbose processing\n");
-    printf("  -V        Validate the crc value for the data for each archive member\n");
+    printf("Usage: arvik -[cxtvVf:h] archive-file file...\n");
+    printf("-c              create a new archive file\n");
+    printf("-x              extract members from an existing archive\n");
+    printf("-t              show the table of contents of archive fi\n");
+    printf(" -f filename    name of archive file to use\n");
+    printf("-V              Validate the crc value for the data\n");
+    printf("-v              verbose output\n");
+    printf("-h              show help text\n");
 }
 
 // Create new archive file
