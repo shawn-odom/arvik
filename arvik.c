@@ -193,10 +193,13 @@ void create_archive(char * archive_name, char ** members, int member_count, int 
 void write_header(int archive_fd, char * filename)
 {
     arvik_header_t header; // Header struct
+    char temp_buf[32];
+    size_t len;
+    size_t name_len;
+    ssize_t bytes_written;
     struct stat st; // File statistics
-
     // Initialize header with zeros
-    memset(&header, 0, sizeof(header));
+    memset(&header, ' ', sizeof(header));
 
     // Get file info
     if (stat(filename, &st) < 0)
@@ -205,39 +208,122 @@ void write_header(int archive_fd, char * filename)
         return;
     }
 
+    // Copy filename and add '/' terminator
+    name_len = strlen(filename);
+    memcpy(header.arvik_name, filename, MIN(name_len, sizeof(header.arvik_name) - 1));
+    if (name_len < sizeof(header.arvik_name)) {
+        header.arvik_name[name_len]  = '/';
+    } else {
+        header.arvik_name[sizeof(header.arvik_name) - 1] = '/';
+    }
+
+    // Format the numeric fields with proper right alignment
+    // and ensure they're space-padded
+
+    // Date field
+
+    sprintf(temp_buf, "%ld", st.st_mtime);
+    len = strlen(temp_buf);
+    memcpy(header.arvik_date, temp_buf, len);
+
+    // UID field
+    sprintf(temp_buf, "%d", st.st_uid);
+    len = strlen(temp_buf);
+    memcpy(header.arvik_uid, temp_buf, len);
+
+    // GID field
+    sprintf(temp_buf, "%d", st.st_gid);
+    len = strlen(temp_buf);
+    memcpy(header.arvik_gid, temp_buf, len);
+
+    // Mode field
+    sprintf(temp_buf, "%o", st.st_mode);
+    len = strlen(temp_buf);
+    memcpy(header.arvik_mode, temp_buf, len);
+
+    // Size field
+    sprintf(temp_buf, "%ld", st.st_size);
+    len = strlen(temp_buf);
+    memcpy(header.arvik_size, temp_buf, len);
+
+    // Set terminator
+    header.arvik_term[0] = '+';
+    header.arvik_term[1] = '\n';
+
+    // Write the entire header struct to the archive file at once
+    bytes_written = write(archive_fd, &header, sizeof(header));
+    if (bytes_written != sizeof(header))
+    {
+        perror("Error writing header");
+    }
+}
+/*
     // Fill in header fields
+    name_len = strlen(filename);
+    memcpy(header.arvik_name, filename, MIN(name_len, sizeof(header.arvik_name) -1));
+    header.arvik_name[name_len] = ARVIK_NAME_TERM;
+
+    sprintf(date_buff, "%ld", st.st_mtime);
+    date_len = strlen(date_buff);
+    memcpy(header.arvik_date + sizeof(header.arvik_date) - date_len -1, date_buff, date_len);
+
+    sprintf(uid_buf, "%d", st.st_uid);
+    uid_len = strlen(uid_buf);
+    memcpy(header.arvik_uid + sizeof(header.arvik_uid) - uid_len - 1, 
+           uid_buf, uid_len);
+    
+    // Format GID (right-aligned)
+    sprintf(gid_buf, "%d", st.st_gid);
+    gid_len = strlen(gid_buf);
+    memcpy(header.arvik_gid + sizeof(header.arvik_gid) - gid_len - 1, 
+           gid_buf, gid_len);
+    
+    // Format mode (right-aligned)
+    sprintf(mode_buf, "%o", st.st_mode);
+    mode_len = strlen(mode_buf);
+    memcpy(header.arvik_mode + sizeof(header.arvik_mode) - mode_len - 1, 
+           mode_buf, mode_len);
+    
+    // Format size (right-aligned)
+    sprintf(size_buf, "%ld", st.st_size);
+    size_len = strlen(size_buf);
+    memcpy(header.arvik_size + sizeof(header.arvik_size) - size_len - 1, 
+           size_buf, size_len);
+
+
     strncpy(header.arvik_name, filename, sizeof(header.arvik_name) -1);
     sprintf(header.arvik_date, "%ld", st.st_mtime); // Convert modification time to string
     sprintf(header.arvik_uid, "%d", st.st_uid);  // Convert UID to string
     sprintf(header.arvik_gid, "%d", st.st_gid); // Convert GID to string
     sprintf(header.arvik_mode, "%o", st.st_mode); // Convert mode to octal string
     sprintf(header.arvik_size, "%ld", st.st_size); // Convert size to string
-
     // Set terminator
-    header.arvik_term[0] = ARVIK_TERM[0];
-    header.arvik_term[1] = ARVIK_TERM[1];
+    header.arvik_term[0] = '+';
+    header.arvik_term[1] = '\n';
 
     // Write the header to the archive
     if (write(archive_fd, &header, sizeof(header)) != sizeof(header))
     {
         perror("Error writing header");
     }
-}
+    */
 
 // Write file footer to archive
 void write_footer(int archive_fd, uLong crc)
 {
     arvik_footer_t footer;
+    char temp[11];
     
     // Init footer with zeros
-    memset(&footer, 0, sizeof(footer));
+    memset(&footer, ' ', sizeof(footer));
 
     // Fill in footer fields
-    sprintf(footer.arvik_data_crc, "0x%0lx", crc); // Convert CRC to hex string
+    snprintf(temp, sizeof(temp), "0x%08lx", crc); // Convert CRC to hex string
+    memcpy(footer.arvik_data_crc, temp, 10);
 
     // Set Terminator
-    footer.arvik_term[0] = ARVIK_TERM[0];
-    footer.arvik_term[1] = ARVIK_TERM[1];
+    footer.arvik_term[0] = '+';
+    footer.arvik_term[1] = '\n';
 
     // Write footer to archive
     if (write(archive_fd, &footer, sizeof(footer)) != sizeof(footer))
