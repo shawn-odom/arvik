@@ -438,11 +438,10 @@ void extract_file(int archive_fd, arvik_header_t header, int verbose, int valida
 
     // Copy file data
     remaining = file_size;
-    if(remaining % 2 != 0)
+    if (remaining % 2 != 0)
     {
         remaining += 1;
     }
-
     while (remaining > 0)
     {
         size_t to_read = remaining < sizeof(buffer) ? remaining : sizeof(buffer);
@@ -456,12 +455,14 @@ void extract_file(int archive_fd, arvik_header_t header, int verbose, int valida
 
         // update CRC
         crc = crc32(crc, (const Bytef*) buffer, bytes_read);
-
         // write data to output file
-        if (write(file_fd, buffer, bytes_read) != bytes_read)
+        if (file_size % 2 != 0)
         {
-            fprintf(stderr, "Error writing to file %s: %s\n", header.arvik_name, strerror(errno));
-            break;
+            write(file_fd, buffer, bytes_read - 1);
+        }
+        else
+        {
+            write(file_fd, buffer, bytes_read);
         }
         
         remaining -= bytes_read;
