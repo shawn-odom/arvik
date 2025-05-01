@@ -24,7 +24,7 @@ clean:
 TAR_FILE = ${LOGNAME}_lab2.tar.gz
 tar:
 	rm -f $(TAR_FILE)
-	tar cvaf $(TAR_FILE) *.[ch] [Mm]akefile
+	tar czaf $(TAR_FILE) *.[c] [Mm]akefile
 	tar tvaf $(TAR_FILE)
 
 git:
